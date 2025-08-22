@@ -253,144 +253,227 @@ show_welcome() {
     local username=$(get_username)
     
     echo
-    print_header "🎬 ═══════════════════════════════════════════════════════════════"
-    print_header "    INTERACTIVE YOUTUBE DOWNLOADER"
-    print_header "═══════════════════════════════════════════════════════════════"
+    echo "🎬 ═══════════════════════════════════════════════════════════════"
+    echo "    INTERACTIVE YOUTUBE DOWNLOADER"
+    echo "═══════════════════════════════════════════════════════════════"
     echo
-    print_info "    👋 Hi ${BOLD}${WHITE}$username${NC}${CYAN}! Welcome to Interactive YouTube Downloader"
+    echo "    👋 Hi $username! Welcome to Interactive YouTube Downloader"
     echo
-    print_dim "    📁 Downloads will be saved to: $DOWNLOADS_DIR"
-    print_dim "    🔧 Powered by yt-dlp and ffmpeg"
+    echo "    📁 Downloads will be saved to: $DOWNLOADS_DIR"
+    echo "    🔧 Powered by yt-dlp and ffmpeg"
     echo
-    draw_separator
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
 }
 
-# Function to show loading animation
-show_loading() {
-    local pid=$1
-    local message="$2"
-    local delay=0.1
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    
-    printf "${CYAN}%s ${WHITE}" "$message"
-    
-    while [ -d /proc/$pid ]; do
-        printf '\b%s' "${spinstr:0:1}"
-        spinstr=${spinstr:1}${spinstr:0:1}
-        sleep $delay
-    done
-    
-    printf '\b✅\n'
-}
-
-# Alternative simple loading for systems where /proc doesn't exist
-show_loading_simple() {
-    local message="$1"
-    printf "${CYAN}%s" "$message"
-    
-    for i in {1..3}; do
-        printf "."
-        sleep 0.5
-    done
-    printf " ✅\n"
-}
-
-# Function to get video information with loading animation
-get_video_info() {
+# Function to get video information super quickly (just validate URL)
+get_video_info_quick() {
     local url="$1"
-    local info_file="$TEMP_DIR/video_info.json"
     
-    print_info "🔍 Fetching video information"
+    echo "🔍 Validating video..."
     
-    # Show loading animation while fetching
-    printf "${CYAN}📡 Loading video details"
+    # Just check if it's a valid YouTube URL format first
+    if [[ ! "$url" =~ ^https?://(www\.)?(youtube\.com|youtu\.be) ]]; then
+        echo "❌ Invalid YouTube URL format"
+        return 1
+    fi
     
-    # Start background process to fetch video info
-    {
-        yt-dlp --dump-json --no-download --no-warnings "$url" > "$info_file" 2>/dev/null
-        echo $? > "$TEMP_DIR/exit_code"
-    } &
+    # Quick title check with timeout
+    echo -n "📡 Checking video"
     
-    local fetch_pid=$!
-    
-    # Show loading animation
-    local delay=0.1
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    
-    while kill -0 $fetch_pid 2>/dev/null; do
-        printf '\r%s📡 Loading video details %s' "${CYAN}" "${spinstr:$((i % ${#spinstr})):1}"
-        ((i++))
-        sleep $delay
-    done
-    
-    # Wait for process to complete and get exit code
-    wait $fetch_pid
-    local exit_code=$(cat "$TEMP_DIR/exit_code" 2>/dev/null || echo "1")
-    
-    # Clear loading line and show result
-    printf '\r\033[K'
-    
-    if [[ "$exit_code" -eq 0 ]] && [[ -s "$info_file" ]]; then
-        print_success "✅ Video information retrieved successfully!"
-        echo
+    # Use timeout to prevent hanging
+    local title=""
+    if command -v timeout >/dev/null 2>&1; then
+        # Linux/some systems have timeout command
+        title=$(timeout 10 yt-dlp --get-title --no-warnings "$url" 2>/dev/null || echo "")
+    else
+        # macOS - use background process with kill
+        {
+            yt-dlp --get-title --no-warnings "$url" 2>/dev/null
+            echo $? > "$TEMP_DIR/title_exit_code"
+        } &
+        local title_pid=$!
         
-        # Parse video information with error handling
-        local title=$(jq -r '.title // "Unknown"' "$info_file" 2>/dev/null || echo "Unknown")
-        local uploader=$(jq -r '.uploader // "Unknown"' "$info_file" 2>/dev/null || echo "Unknown")
-        local duration=$(jq -r '.duration_string // "Unknown"' "$info_file" 2>/dev/null || echo "Unknown")
-        local view_count=$(jq -r '.view_count // 0' "$info_file" 2>/dev/null || echo "0")
-        local upload_date=$(jq -r '.upload_date // "Unknown"' "$info_file" 2>/dev/null || echo "Unknown")
+        # Wait max 10 seconds
+        local count=0
+        while kill -0 $title_pid 2>/dev/null && [[ $count -lt 20 ]]; do
+            echo -n "."
+            sleep 0.5
+            ((count++))
+        done
         
-        # Format view count
-        if [[ "$view_count" =~ ^[0-9]+$ ]] && [[ $view_count -gt 0 ]]; then
-            if [[ $view_count -ge 1000000000 ]]; then
-                view_count=$(printf "%.1f" $(echo "scale=1; $view_count/1000000000" | bc 2>/dev/null || echo "$view_count"))B
-            elif [[ $view_count -ge 1000000 ]]; then
-                view_count=$(printf "%.1f" $(echo "scale=1; $view_count/1000000" | bc 2>/dev/null || echo "$view_count"))M
-            elif [[ $view_count -ge 1000 ]]; then
-                view_count=$(printf "%.1f" $(echo "scale=1; $view_count/1000" | bc 2>/dev/null || echo "$view_count"))K
-            fi
-            view_count="${view_count} views"
-        else
-            view_count="Unknown views"
+        # Kill if still running
+        if kill -0 $title_pid 2>/dev/null; then
+            kill $title_pid 2>/dev/null
+            echo " Timeout!"
+            echo "❌ Video check timed out - the video might be private or restricted"
+            return 1
         fi
         
-        # Format upload date
-        if [[ "$upload_date" =~ ^[0-9]{8}$ ]]; then
-            upload_date="${upload_date:0:4}-${upload_date:4:2}-${upload_date:6:2}"
-        fi
-        
-        # Display video information
-        echo -e "${WHITE}${BOLD}📹 Video Details:${NC}"
-        draw_separator
-        echo -e "${CYAN}   Title:${NC}     ${WHITE}$title${NC}"
-        echo -e "${CYAN}   Channel:${NC}   ${WHITE}$uploader${NC}"
-        echo -e "${CYAN}   Duration:${NC}  ${WHITE}$duration${NC}"
-        echo -e "${CYAN}   Views:${NC}     ${WHITE}$view_count${NC}"
-        echo -e "${CYAN}   Uploaded:${NC}  ${WHITE}$upload_date${NC}"
-        draw_separator
+        wait $title_pid 2>/dev/null
+        title=$(cat "$TEMP_DIR/title_result" 2>/dev/null || echo "")
+    fi
+    
+    echo " Done!"
+    
+    if [[ -n "$title" && "$title" != "" ]]; then
+        echo "✅ Video found: $title"
         echo
-        
         return 0
     else
-        print_error "❌ Failed to fetch video information"
-        print_error "   Please check if the URL is valid and accessible"
+        echo "❌ Could not access video"
+        echo "   The video might be private, restricted, or the URL is invalid"
         echo
         return 1
     fi
 }
 
-# Function to get available formats with loading animation
+# Function to get available formats with basic info only
+get_available_formats_quick() {
+    local url="$1"
+    local formats_file="$TEMP_DIR/formats.txt"
+    
+    echo "🔍 Getting download options..."
+    echo -n "📊 Scanning"
+    
+    # Get format list quickly
+    {
+        yt-dlp -F "$url" --no-warnings 2>/dev/null > "$formats_file"
+        echo $? > "$TEMP_DIR/formats_exit_code"
+    } &
+    
+    local formats_pid=$!
+    
+    # Simple dot animation
+    while kill -0 $formats_pid 2>/dev/null; do
+        echo -n "."
+        sleep 0.2
+    done
+    
+    wait $formats_pid
+    local exit_code=$(cat "$TEMP_DIR/formats_exit_code" 2>/dev/null || echo "1")
+    
+    echo " Done!"
+    echo
+    
+    if [[ "$exit_code" -eq 0 ]]; then
+        echo "✅ Found download options!"
+        echo
+    else
+        echo "❌ Failed to get download options"
+        return 1
+    fi
+    
+    # Parse formats quickly - detect all quality levels
+    local video_formats=()
+    local format_descriptions=()
+    
+    # Add audio-only option
+    video_formats+=("bestaudio")
+    format_descriptions+=("🎵 Audio Only")
+    
+    # Quality detection flags
+    local found_8k=false
+    local found_4k=false
+    local found_2k=false
+    local found_1080p=false
+    local found_720p=false
+    local found_480p=false
+    
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[0-9]+ ]] && [[ "$line" =~ video ]] && [[ ! "$line" =~ "audio only" ]]; then
+            local format_id=$(echo "$line" | awk '{print $1}')
+            local ext=$(echo "$line" | awk '{print $2}')
+            local resolution=$(echo "$line" | awk '{print $3}')
+            
+            # Detect and include quality levels available
+            if [[ "$resolution" =~ "7680x4320" || "$resolution" =~ "4320" ]] && [[ "$found_8k" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("🌟 8K UHD [$ext]")
+                found_8k=true
+            elif [[ "$resolution" =~ "3840x2160" || "$resolution" =~ "2160" ]] && [[ "$found_4k" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("🏆 4K UHD [$ext]")
+                found_4k=true
+            elif [[ "$resolution" =~ "2560x1440" || "$resolution" =~ "1440" ]] && [[ "$found_2k" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("💎 2K QHD [$ext]")
+                found_2k=true
+            elif [[ "$resolution" =~ "1920x1080" || "$resolution" =~ "1080" ]] && [[ "$found_1080p" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("⭐ Full HD [$ext]")
+                found_1080p=true
+            elif [[ "$resolution" =~ "1280x720" || "$resolution" =~ "720" ]] && [[ "$found_720p" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("📺 HD [$ext]")
+                found_720p=true
+            elif [[ "$resolution" =~ "854x480" || "$resolution" =~ "640x480" || "$resolution" =~ "480" ]] && [[ "$found_480p" == false ]]; then
+                video_formats+=("$format_id")
+                format_descriptions+=("📱 SD [$ext]")
+                found_480p=true
+            fi
+        fi
+    done < "$formats_file"
+    
+    # Add best quality option
+    video_formats+=("best")
+    format_descriptions+=("🚀 Best Available")
+    
+    # Store in global arrays
+    AVAILABLE_FORMATS=("${video_formats[@]}")
+    FORMAT_DESCRIPTIONS=("${format_descriptions[@]}")
+}
+
+# Function to check subtitles quickly
+check_subtitles_quick() {
+    local url="$1"
+    
+    echo -n "📝 Checking subtitles"
+    
+    # Quick subtitle check
+    local subs_output=$(yt-dlp --list-subs "$url" --no-warnings 2>/dev/null)
+    local has_subs=$(echo "$subs_output" | grep -c "Available subtitles" || echo "0")
+    
+    echo " Done!"
+    
+    if [[ $has_subs -gt 0 ]]; then
+        echo "✅ Subtitles available"
+        echo
+        
+        # Parse actual available languages quickly
+        local available_subs=()
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^[a-z]{2}(-[A-Z]{2})? ]]; then
+                local lang_code=$(echo "$line" | awk '{print $1}')
+                local lang_name=$(echo "$line" | cut -d' ' -f2- | sed 's/^[[:space:]]*//' | cut -d',' -f1)
+                available_subs+=("$lang_code|$lang_name")
+                
+                # Limit to first 8 languages for speed
+                if [[ ${#available_subs[@]} -ge 8 ]]; then
+                    break
+                fi
+            fi
+        done <<< "$subs_output"
+        
+        if [[ ${#available_subs[@]} -gt 0 ]]; then
+            AVAILABLE_SUBTITLES=("${available_subs[@]}")
+            return 0
+        fi
+    fi
+    
+    # No subtitles found
+    echo "⚠️  No subtitles available"
+    echo
+    return 1
+}
+
+# Function to get available formats with simple loading
 get_available_formats() {
     local url="$1"
     local formats_file="$TEMP_DIR/formats.txt"
     
-    print_info "🔍 Analyzing available formats"
-    
-    # Show loading while getting formats
-    printf "${CYAN}📊 Scanning quality options"
+    echo "🔍 Analyzing available formats..."
+    echo -n "📊 Scanning"
     
     # Start background process
     {
@@ -400,29 +483,24 @@ get_available_formats() {
     
     local formats_pid=$!
     
-    # Loading animation
-    local delay=0.15
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    
+    # Simple dot animation
     while kill -0 $formats_pid 2>/dev/null; do
-        printf '\r%s📊 Scanning quality options %s' "${CYAN}" "${spinstr:$((i % ${#spinstr})):1}"
-        ((i++))
-        sleep $delay
+        echo -n "."
+        sleep 0.3
     done
     
     # Wait and get exit code
     wait $formats_pid
     local exit_code=$(cat "$TEMP_DIR/formats_exit_code" 2>/dev/null || echo "1")
     
-    # Clear loading line
-    printf '\r\033[K'
+    echo " Done!"
+    echo
     
     if [[ "$exit_code" -eq 0 ]]; then
-        print_success "✅ Quality analysis complete!"
+        echo "✅ Quality analysis complete!"
         echo
     else
-        print_error "❌ Failed to analyze available formats"
+        echo "❌ Failed to analyze available formats"
         return 1
     fi
     
@@ -526,12 +604,12 @@ get_user_choice() {
     echo
 }
 
-# Function to check available subtitles with loading animation
+# Function to check available subtitles with simple loading
 check_subtitles() {
     local url="$1"
     local subs_file="$TEMP_DIR/subtitles.txt"
     
-    printf "${CYAN}📝 Checking for subtitles"
+    echo -n "📝 Checking subtitles"
     
     # Start background process
     {
@@ -541,26 +619,21 @@ check_subtitles() {
     
     local subs_pid=$!
     
-    # Loading animation
-    local delay=0.12
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    
+    # Simple dot animation
     while kill -0 $subs_pid 2>/dev/null; do
-        printf '\r%s📝 Checking for subtitles %s' "${CYAN}" "${spinstr:$((i % ${#spinstr})):1}"
-        ((i++))
-        sleep $delay
+        echo -n "."
+        sleep 0.4
     done
     
     # Wait and get exit code
     wait $subs_pid
     local exit_code=$(cat "$TEMP_DIR/subs_exit_code" 2>/dev/null || echo "1")
     
-    # Clear loading line
-    printf '\r\033[K'
+    echo " Done!"
+    echo
     
     if [[ "$exit_code" -eq 0 ]] && grep -q "Available subtitles" "$subs_file"; then
-        print_success "✅ Subtitles found!"
+        echo "✅ Subtitles found!"
         
         # Parse available subtitle languages
         local available_subs=()
@@ -578,7 +651,7 @@ check_subtitles() {
         fi
     fi
     
-    print_warning "⚠️  No subtitles available"
+    echo "⚠️  No subtitles available"
     return 1
 }
 
@@ -818,23 +891,23 @@ get_time_greeting() {
 # Function to ask for another download
 ask_continue() {
     echo
-    draw_separator
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
-    print_header "🎯 What would you like to do next?"
+    echo "🎯 What would you like to do next?"
     echo
-    echo -e "${WHITE}   1.${NC} 🔄 Download another video"
-    echo -e "${WHITE}   2.${NC} 🚪 Exit application"
+    echo "   1. 🔄 Download another video"
+    echo "   2. 🚪 Exit application"
     echo
-    draw_separator
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo
     
     while true; do
-        echo -e "${CYAN}👆 Please select an option (1-2): ${NC}"
+        echo -n "👆 Please select an option (1-2): "
         read -r choice
         
         case $choice in
             1)
-                print_success "✅ Great! Let's download another video."
+                echo "✅ Great! Let's download another video."
                 echo
                 return 0
                 ;;
@@ -842,12 +915,12 @@ ask_continue() {
                 local username=$(get_username)
                 local time_period=$(get_time_greeting)
                 echo
-                print_success "👋 Thank you ${BOLD}${WHITE}$username${NC}${GREEN}! Have a great $time_period!"
+                echo "👋 Thank you $username! Have a great $time_period!"
                 echo
                 return 1
                 ;;
             *)
-                print_error "   ❌ Invalid choice. Please enter 1 or 2."
+                echo "   ❌ Invalid choice. Please enter 1 or 2."
                 echo
                 ;;
         esac
@@ -882,13 +955,13 @@ main() {
             continue
         fi
         
-        # Get video information
-        if ! get_video_info "$url"; then
+        # Get video information quickly
+        if ! get_video_info_quick "$url"; then
             continue
         fi
         
-        # Get available formats
-        get_available_formats "$url"
+        # Get available formats quickly
+        get_available_formats_quick "$url"
         
         # Show format menu
         show_format_menu
@@ -896,15 +969,14 @@ main() {
         # Get user choice
         get_user_choice
         
-        # Check for subtitles and get subtitle choice
-        if check_subtitles "$url"; then
+        # Check for subtitles quickly
+        if check_subtitles_quick "$url"; then
             show_subtitle_options
             get_subtitle_choice
         else
             SUBTITLE_OPTION="none"
             SUBTITLE_DESC="🚫 No subtitles available"
-            print_warning "⚠️  No subtitles available for this video"
-            echo
+            # No need to show subtitle menu if none are available
         fi
         
         # Confirm download
