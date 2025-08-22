@@ -581,26 +581,32 @@ show_format_menu() {
     echo
 }
 
-# Function to get user choice
+# Function to get user choice with input validation
 get_user_choice() {
     local max_choice=${#AVAILABLE_FORMATS[@]}
     local choice=""
     
     while true; do
-        echo -e "${CYAN}🎯 Select download option (1-$max_choice): ${NC}"
+        # Clear input buffer
+        while read -r -t 0; do
+            read -r
+        done
+        
+        echo -n "🎯 Select download option (1-$max_choice): "
         read -r choice
         
+        # Check if choice is a number and within range
         if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 1 ]] && [[ $choice -le $max_choice ]]; then
             SELECTED_FORMAT_INDEX=$((choice - 1))
             break
         else
-            print_error "   ❌ Invalid choice. Please enter a number between 1 and $max_choice."
+            echo "   ❌ Invalid choice. Please enter a number between 1 and $max_choice."
             echo
         fi
     done
     
     echo
-    print_success "✅ Selected: ${FORMAT_DESCRIPTIONS[$SELECTED_FORMAT_INDEX]}"
+    echo "✅ Selected: ${FORMAT_DESCRIPTIONS[$SELECTED_FORMAT_INDEX]}"
     echo
 }
 
@@ -943,14 +949,39 @@ main() {
     
     # Main loop
     while true; do
-        # Get YouTube URL
-        echo -e "${CYAN}🔗 Please enter YouTube URL: ${NC}"
+        # Clear any input buffer before asking for URL
+        while read -r -t 0; do
+            read -r
+        done
+        
+        # Get YouTube URL with validation
+        echo -n "🔗 Please enter YouTube URL: "
         read -r url
+        echo
+        
+        # Validate URL format first
+        if [[ -z "$url" ]]; then
+            echo "❌ No URL entered. Please try again."
+            echo
+            continue
+        fi
+        
+        # Check if it looks like a YouTube URL
+        if [[ ! "$url" =~ ^https?://(www\.)?(youtube\.com|youtu\.be) ]]; then
+            echo "❌ Please enter a valid YouTube URL (youtube.com or youtu.be)"
+            echo
+            continue
+        fi
+        
+        # Clean the URL (remove extra parameters that might cause issues)
+        url=$(echo "$url" | sed 's/&list=.*//' | sed 's/&start_radio=.*//' | sed 's/&t=.*//')
+        
+        echo "🔗 Using URL: $url"
         echo
         
         # Validate URL
         if ! validate_url "$url"; then
-            print_error "❌ Invalid YouTube URL. Please try again."
+            echo "❌ Invalid YouTube URL format. Please try again."
             echo
             continue
         fi
