@@ -1,0 +1,22 @@
+# Example YouTube URLs for testing the downloader
+# Lines starting with # are comments and will be ignored
+# Add one URL per line
+
+# Popular music videos (safe for testing)
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+https://www.youtube.com/watch?v=9bZkp7q19f0
+
+# Educational content
+https://www.youtube.com/watch?v=aircAruvnKk
+
+# Tech talks (usually have good subtitles)
+https://www.youtube.com/watch?v=8pDqJVdNa44
+
+# You can also add playlist URLs (uncomment to use)
+# https://www.youtube.com/playlist?list=PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab
+
+# Short videos for quick testing
+https://www.youtube.com/watch?v=jNQXAC9IVRw
+
+# Note: Replace these with actual URLs you want to download
+# These are just examples to show the format

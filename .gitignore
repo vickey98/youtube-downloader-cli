@@ -1,0 +1,69 @@
+# Downloaded media files
+downloads/
+*.mp4
+*.webm
+*.mkv
+*.m4a
+*.mp3
+*.wav
+*.vtt
+*.srt
+
+# Temporary files
+*.tmp
+*.temp
+*.part
+*.download
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# User-specific config files
+config
+.ytdl/
+.yt-dlp/
+
+# Logs
+*.log
+debug.log
+error.log
+
+# Cache files
+.cache/
+cache/
+
+# Backup files
+*.bak
+*.backup
+
+# Archive files (if created during development)
+*.zip
+*.tar.gz
+*.rar
+
+# Node.js (in case you add any JS tools later)
+node_modules/
+npm-debug.log
+
+# Python (in case you add any Python tools later)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
