@@ -329,21 +329,25 @@ get_available_formats_quick() {
     video_formats+=("bestaudio")
     format_descriptions+=("🎵 Audio Only")
     
-    # Add the proven working formats based on your command pattern
-    video_formats+=("best[height<=2160]")
-    format_descriptions+=("🏆 4K UHD (Best)")
+    # Add proper 4K format - merge best video and audio for true 4K quality
+    video_formats+=("bestvideo[height<=2160]+bestaudio/best[height<=2160]")
+    format_descriptions+=("🏆 4K UHD (Best Video + Audio)")
     
-    video_formats+=("best[height<=1440]")
-    format_descriptions+=("💎 2K QHD (Best)")
+    # Add 2K format - merge video and audio
+    video_formats+=("bestvideo[height<=1440]+bestaudio/best[height<=1440]")
+    format_descriptions+=("💎 2K QHD (Best Video + Audio)")
     
-    video_formats+=("best[height<=1080]")
-    format_descriptions+=("⭐ Full HD (Best)")
+    # Add 1080p format - merge video and audio  
+    video_formats+=("bestvideo[height<=1080]+bestaudio/best[height<=1080]")
+    format_descriptions+=("⭐ Full HD (Best Video + Audio)")
     
-    video_formats+=("best[height<=720]")
-    format_descriptions+=("📺 HD (Best)")
+    # Add 720p format - merge video and audio
+    video_formats+=("bestvideo[height<=720]+bestaudio/best[height<=720]")
+    format_descriptions+=("📺 HD (Best Video + Audio)")
     
+    # Add best available (single stream for compatibility)
     video_formats+=("best")
-    format_descriptions+=("🚀 Best Available")
+    format_descriptions+=("🚀 Best Available (Single Stream)")
     
     # Store in global arrays
     AVAILABLE_FORMATS=("${video_formats[@]}")
