@@ -266,7 +266,7 @@ show_welcome() {
     echo
 }
 
-# Function to get video information super quickly (just validate URL)
+# Function to get video information simply (just like the working command)
 get_video_info_quick() {
     local url="$1"
     
@@ -278,85 +278,42 @@ get_video_info_quick() {
         return 1
     fi
     
-    # Quick title check with timeout
+    # Simple validation - just try to get basic info like the working command
     echo -n "📡 Checking video"
     
-    # Use timeout to prevent hanging
-    local title=""
-    if command -v timeout >/dev/null 2>&1; then
-        # Linux/some systems have timeout command
-        title=$(timeout 10 yt-dlp --get-title --no-warnings "$url" 2>/dev/null || echo "")
-    else
-        # macOS - use background process with kill
-        {
-            yt-dlp --get-title --no-warnings "$url" 2>/dev/null
-            echo $? > "$TEMP_DIR/title_exit_code"
-        } &
-        local title_pid=$!
-        
-        # Wait max 10 seconds
-        local count=0
-        while kill -0 $title_pid 2>/dev/null && [[ $count -lt 20 ]]; do
-            echo -n "."
-            sleep 0.5
-            ((count++))
-        done
-        
-        # Kill if still running
-        if kill -0 $title_pid 2>/dev/null; then
-            kill $title_pid 2>/dev/null
-            echo " Timeout!"
-            echo "❌ Video check timed out - the video might be private or restricted"
-            return 1
-        fi
-        
-        wait $title_pid 2>/dev/null
-        title=$(cat "$TEMP_DIR/title_result" 2>/dev/null || echo "")
-    fi
-    
-    echo " Done!"
-    
-    if [[ -n "$title" && "$title" != "" ]]; then
+    # Use the same approach as the working command - let yt-dlp handle everything
+    if yt-dlp --no-download --quiet --print "%(title)s" "$url" >/dev/null 2>&1; then
+        local title=$(yt-dlp --no-download --quiet --print "%(title)s" "$url" 2>/dev/null || echo "Video")
+        echo " Done!"
+        echo
         echo "✅ Video found: $title"
         echo
         return 0
     else
+        echo " Failed!"
+        echo
         echo "❌ Could not access video"
-        echo "   The video might be private, restricted, or the URL is invalid"
+        echo "   Please check if the URL is valid and the video is accessible"
         echo
         return 1
     fi
 }
 
-# Function to get available formats with basic info only
+# Function to get available formats simply (like the working command)
 get_available_formats_quick() {
     local url="$1"
-    local formats_file="$TEMP_DIR/formats.txt"
     
     echo "🔍 Getting download options..."
     echo -n "📊 Scanning"
     
-    # Get format list quickly
-    {
-        yt-dlp -F "$url" --no-warnings 2>/dev/null > "$formats_file"
-        echo $? > "$TEMP_DIR/formats_exit_code"
-    } &
-    
-    local formats_pid=$!
-    
-    # Simple dot animation
-    while kill -0 $formats_pid 2>/dev/null; do
-        echo -n "."
-        sleep 0.2
-    done
-    
-    wait $formats_pid
-    local exit_code=$(cat "$TEMP_DIR/formats_exit_code" 2>/dev/null || echo "1")
+    # Use the same approach as your working command - let yt-dlp do the work
+    local formats_output=$(yt-dlp -F "$url" --no-warnings 2>/dev/null)
+    local exit_code=$?
     
     echo " Done!"
     echo
     
-    if [[ "$exit_code" -eq 0 ]]; then
+    if [[ $exit_code -eq 0 ]]; then
         echo "✅ Found download options!"
         echo
     else
@@ -364,58 +321,27 @@ get_available_formats_quick() {
         return 1
     fi
     
-    # Parse formats quickly - detect all quality levels
+    # Parse formats simply - just look for the common ones that work
     local video_formats=()
     local format_descriptions=()
     
-    # Add audio-only option
+    # Add audio-only option (always works)
     video_formats+=("bestaudio")
     format_descriptions+=("🎵 Audio Only")
     
-    # Quality detection flags
-    local found_8k=false
-    local found_4k=false
-    local found_2k=false
-    local found_1080p=false
-    local found_720p=false
-    local found_480p=false
+    # Add the proven working formats based on your command pattern
+    video_formats+=("best[height<=2160]")
+    format_descriptions+=("🏆 4K UHD (Best)")
     
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^[0-9]+ ]] && [[ "$line" =~ video ]] && [[ ! "$line" =~ "audio only" ]]; then
-            local format_id=$(echo "$line" | awk '{print $1}')
-            local ext=$(echo "$line" | awk '{print $2}')
-            local resolution=$(echo "$line" | awk '{print $3}')
-            
-            # Detect and include quality levels available
-            if [[ "$resolution" =~ "7680x4320" || "$resolution" =~ "4320" ]] && [[ "$found_8k" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("🌟 8K UHD [$ext]")
-                found_8k=true
-            elif [[ "$resolution" =~ "3840x2160" || "$resolution" =~ "2160" ]] && [[ "$found_4k" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("🏆 4K UHD [$ext]")
-                found_4k=true
-            elif [[ "$resolution" =~ "2560x1440" || "$resolution" =~ "1440" ]] && [[ "$found_2k" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("💎 2K QHD [$ext]")
-                found_2k=true
-            elif [[ "$resolution" =~ "1920x1080" || "$resolution" =~ "1080" ]] && [[ "$found_1080p" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("⭐ Full HD [$ext]")
-                found_1080p=true
-            elif [[ "$resolution" =~ "1280x720" || "$resolution" =~ "720" ]] && [[ "$found_720p" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("📺 HD [$ext]")
-                found_720p=true
-            elif [[ "$resolution" =~ "854x480" || "$resolution" =~ "640x480" || "$resolution" =~ "480" ]] && [[ "$found_480p" == false ]]; then
-                video_formats+=("$format_id")
-                format_descriptions+=("📱 SD [$ext]")
-                found_480p=true
-            fi
-        fi
-    done < "$formats_file"
+    video_formats+=("best[height<=1440]")
+    format_descriptions+=("💎 2K QHD (Best)")
     
-    # Add best quality option
+    video_formats+=("best[height<=1080]")
+    format_descriptions+=("⭐ Full HD (Best)")
+    
+    video_formats+=("best[height<=720]")
+    format_descriptions+=("📺 HD (Best)")
+    
     video_formats+=("best")
     format_descriptions+=("🚀 Best Available")
     
@@ -754,30 +680,15 @@ confirm_download() {
     done
 }
 
-# Function to show progress bar
-show_progress() {
-    local current=$1
-    local total=$2
-    local width=50
-    local percentage=$((current * 100 / total))
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    
-    printf "\r${CYAN}📊 Progress: ${WHITE}["
-    printf "%*s" $filled | tr ' ' '█'
-    printf "%*s" $empty | tr ' ' '░'
-    printf "] ${BOLD}%d%%${NC} " $percentage
-}
-
-# Function to download video
+# Function to download video using the proven working method
 download_video() {
     local url="$1"
     local format_code="${AVAILABLE_FORMATS[$SELECTED_FORMAT_INDEX]}"
     
-    print_info "🚀 Starting download..."
+    echo "🚀 Starting download..."
     echo
     
-    # Build yt-dlp command
+    # Build yt-dlp command using the same pattern as your working command
     local cmd="yt-dlp"
     cmd+=" -f \"$format_code\""
     cmd+=" -o \"$DOWNLOADS_DIR/%(title)s.%(ext)s\""
@@ -801,81 +712,32 @@ download_video() {
     
     cmd+=" \"$url\""
     
-    print_dim "🔧 Command: $cmd"
+    echo "🔧 Command: $cmd"
     echo
     
-    # Create a temporary file for download output
-    local temp_output="$TEMP_DIR/download_output.txt"
-    local progress_file="$TEMP_DIR/progress.txt"
-    
-    print_info "📡 Initializing download..."
+    echo "📡 Initializing download..."
     echo
     
-    # Execute download in background and capture output
-    (eval "$cmd" 2>&1) | while IFS= read -r line; do
-        echo "$line" >> "$temp_output"
-        
-        # Parse download progress
-        if [[ "$line" =~ \[download\].*([0-9]+\.[0-9]+)%.*of.*([0-9]+\.[0-9]+[MKG]iB) ]]; then
-            local percent="${BASH_REMATCH[1]}"
-            local size="${BASH_REMATCH[2]}"
-            
-            # Clean display
-            printf "\r\033[K"
-            printf "${CYAN}📥 Downloading... ${WHITE}${BOLD}${percent}%%${NC} ${GRAY}(${size})${NC}"
-            
-        elif [[ "$line" =~ \[download\].*100% ]]; then
-            printf "\r\033[K"
-            print_success "✅ Video download completed!"
-            
-        elif [[ "$line" =~ \[info\].*Writing.*subtitles ]]; then
-            print_info "📝 Downloading subtitles..."
-            
-        elif [[ "$line" =~ \[Merger\] ]]; then
-            print_info "🔄 Merging video and audio..."
-            
-        elif [[ "$line" =~ Deleting.*original.*file ]]; then
-            # Ignore cleanup messages
-            continue
-            
-        elif [[ "$line" =~ \[ffmpeg\] ]]; then
-            print_info "🎬 Processing video..."
-            
-        elif [[ "$line" =~ ERROR ]]; then
-            echo
-            print_error "❌ Error: $line"
-            return 1
-        fi
-    done
-    
-    # Wait for background process to complete
-    wait
-    
-    echo
-    echo
-    
-    # Check if download was successful
-    if grep -q "ERROR" "$temp_output" 2>/dev/null; then
-        print_error "❌ Download failed!"
+    # Execute download directly (like your working command)
+    if eval "$cmd"; then
         echo
-        return 1
-    else
-        print_success "🎉 Download completed successfully!"
-        print_success "📁 Files saved to: $DOWNLOADS_DIR"
+        echo "🎉 Download completed successfully!"
+        echo "📁 Files saved to: $DOWNLOADS_DIR"
         
         # Show what was downloaded
         if [[ "$SUBTITLE_OPTION" != "none" ]]; then
-            print_info "📝 Subtitles: $SUBTITLE_DESC"
-        fi
-        
-        # Show final file info
-        local video_file=$(grep -o "$DOWNLOADS_DIR/[^\"]*\.\(mp4\|webm\|mkv\)" "$temp_output" 2>/dev/null | head -1)
-        if [[ -n "$video_file" && -f "$video_file" ]]; then
-            local file_size=$(du -h "$video_file" 2>/dev/null | cut -f1)
-            print_info "📏 File size: $file_size"
+            echo "📝 Subtitles: $SUBTITLE_DESC"
         fi
         
         echo
+    else
+        echo
+        echo "❌ Download failed!"
+        echo "   The same command that worked manually should work here too."
+        echo "   Try running this command manually:"
+        echo "   $cmd"
+        echo
+        return 1
     fi
 }
 
